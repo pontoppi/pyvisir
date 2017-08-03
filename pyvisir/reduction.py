@@ -1,10 +1,10 @@
 import os
 import pandas as pd
-from observation import *
-from order import *
-from spec1d import *
-from calspec import *
-from combine_orders import *
+from pyvisir.observation import *
+from pyvisir.order import *
+from pyvisir.spec1d import *
+from pyvisir.calspec import *
+from pyvisir.combine_orders import *
 
 import utils.helpers as helpers
 

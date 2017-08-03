@@ -16,6 +16,7 @@ class visir_run():
         targets = []
         airmasses = []
         exptimes = []
+        posangs = []
         nodpositions = []
         xoffs = []
         yoffs = []
@@ -32,6 +33,7 @@ class visir_run():
             cat = hdr['HIERARCH ESO DPR CATG']
             target = hdr['HIERARCH ESO OBS TARG NAME']
             exptime = hdr['HIERARCH ESO DET SEQ1 EXPTIME']
+            posang = hdr['HIERARCH ESO ADA POSANG']
     
             if 'HIERARCH ESO SEQ NODPOS' in hdr:
                 nodpos = hdr['HIERARCH ESO SEQ NODPOS']
@@ -61,6 +63,7 @@ class visir_run():
             targets.append(target)
             nodpositions.append(nodpos)
             exptimes.append(exptime)
+            posangs.append(posang)
             xoffs.append(xoff)
             yoffs.append(yoff)
             airmasses.append(airmass)
@@ -75,6 +78,7 @@ class visir_run():
                                   'target':pd.Series(targets),
                                   'nodpos':pd.Series(nodpositions),
                                   'exptime':pd.Series(exptimes),
+                                  'posang':pd.Series(posangs),
                                   'xoff':pd.Series(xoffs),
                                   'yoff':pd.Series(yoffs),
                                   'airmass':pd.Series(airmasses),
@@ -89,11 +93,17 @@ class visir_run():
         obsids = self.df['obsid']
         return obsids.unique()
     
-    def get_sciencelist(self,obsid):
+    def get_sciencelist(self,obsid,skip_first=True):
         scilist = self.df.loc[(self.df['obsid'] == obsid) & (self.df['category'] == 'SCIENCE')]
-        return scilist[1:] #skip the first frame since these seem to have an electronic problem
+        if skip_first:
+            return scilist[1:] #skip the first frame since these seem to have an electronic problem
+        else:
+            return scilist   
     
-    def get_caliblist(self,obsid):
+    def get_caliblist(self,obsid,skip_first=True):
         scilist = self.df.loc[(self.df['obsid'] == obsid) & (self.df['category'] == 'CALIB')]
-        return scilist[1:] #skip the first frame since these seem to have an electronic problem
-    
+        if skip_first:
+            return scilist[1:] #skip the first frame since these seem to have an electronic problem
+        else:
+            return scilist   
+            

@@ -1,7 +1,7 @@
 import warnings
 import json
 import os
-import ConfigParser as cp
+import configparser as cp
 
 import warnings
 
@@ -14,7 +14,7 @@ from scipy.stats import tmean, tvar
 from scipy.ndimage.filters import median_filter
 from scipy import constants
 import matplotlib.pylab as plt
-import inpaint as inpaint
+import pyvisir.inpaint as inpaint
 import utils.helpers as helpers
 
 warnings.filterwarnings('ignore', category=AstropyUserWarning)
@@ -211,7 +211,7 @@ class Observation():
             self.uimage = np.sqrt(self.uimage**2+Obs.uimage**2)
             self.image -= Obs.image
         except:
-            print 'Subtraction failed - no image calculated'
+            print('Subtraction failed - no image calculated')
     
     def divideInStack(self,Obs):
         warnings.resetwarnings()
@@ -261,7 +261,7 @@ class Observation():
             klist = [header[keyword] for header in self.headers]
             return klist
         except ValueError:
-            print "Invalid header keyword"
+            print("Invalid header keyword")
 
 class Flat(Observation):
     def __init__(self,filelist,dark=None,norm_thres=5000.,save=False):

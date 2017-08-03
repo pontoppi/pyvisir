@@ -37,8 +37,6 @@ class Spec1D():
         PSF = np.median(self.Order.image_rect[range[0]:range[1],:],1)
         npsf = PSF.size
         PSF_norm = PSF/np.abs(PSF).sum()
-#        PSF_norm[:11]=0
-#        PSF_norm[28:]=0
         return PSF_norm
         
     def extract(self,PSF):
@@ -46,7 +44,7 @@ class Spec1D():
         pixsig = 1.
         sh   = self.sh
         npsf = PSF.size
-
+     
         flux  = np.zeros(sh)
         uflux = np.zeros(sh)
         sky1d  = np.zeros(sh)

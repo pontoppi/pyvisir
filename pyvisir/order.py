@@ -1,7 +1,7 @@
 import warnings
 import json
 import os
-import ConfigParser as cp
+import configparser as cp
 
 import numpy as np
 import numpy.ma as ma
@@ -12,7 +12,7 @@ from scipy.ndimage.filters import median_filter
 from scipy import constants
 from scipy import interpolate as ip
 import matplotlib.pylab as plt
-import inpaint as inpaint
+import pyvisir.inpaint as inpaint
 import utils.helpers as helpers
 
 class Order():
@@ -65,7 +65,7 @@ class Order():
         polys = []
         for yr in yrs:
             yindex = np.arange(yr[0],yr[1])
-            kernel = np.median(self.image[yindex,sh[0]/2-kwidth:sh[0]/2+kwidth],1)
+            kernel = np.median(self.image[yindex,int(sh[0]/2-kwidth):int(sh[0]/2+kwidth)],1)
             centroids = []
             totals = []
             for i in np.arange(sh[1]):
@@ -82,9 +82,10 @@ class Order():
             centroids = np.array(centroids)
         
             xindex = np.arange(sh[1])
-            gsubs = np.where((np.isnan(centroids)==False) & (xindex>50) & (xindex<sh[1]-50))
+            gsubs = np.where((np.isnan(centroids)==False) & (xindex>50) & (xindex<sh[1]-50) &
+                             (centroids<15) & (centroids>-15))
             
-            centroids[gsubs] = median_filter(centroids[gsubs],size=5)
+            centroids[gsubs] = median_filter(centroids[gsubs],size=25)
             coeffs = np.polyfit(xindex[gsubs],centroids[gsubs],porder)
 
             poly = np.poly1d(coeffs)
