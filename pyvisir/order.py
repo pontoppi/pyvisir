@@ -2,6 +2,7 @@ import warnings
 import json
 import os
 import configparser as cp
+import pdb as pdb
 
 import numpy as np
 import numpy.ma as ma
@@ -16,23 +17,24 @@ import pyvisir.inpaint as inpaint
 import utils.helpers as helpers
 
 class Order():
-    def __init__(self,Nod,onum=1,write_path=None):
+    def __init__(self,Nod,onum=1,write_path=None,doTracePlot=False):
         self.type = 'order'
         self.flist = Nod.flist
         self.airmass = Nod.airmass
         self.target = Nod.target
         self.obsid = Nod.obsid
-        
+        self.date = Nod.date
+
         self.Envi    = Nod.Envi
         self.onum    = onum
         self.setting = Nod.setting
 
+        self.doTracePlot = doTracePlot
+
         self.image = Nod.image
         self.uimage = Nod.uimage
         self.sh = self.image.shape
-        #xrs,traces = self.fitTrace(porder=1,cwidth=3.)
-        #trace = traces[0]
-        #import pdb;pdb.set_trace()
+
         self.yrange = self.Envi.getYRange(self.setting,onum)
         self.image = Nod.image[self.yrange[0]:self.yrange[1],:]
         self.uimage = Nod.uimage[self.yrange[0]:self.yrange[1],:]
@@ -41,11 +43,13 @@ class Order():
         self.sh = self.image.shape
 
         self._subMedian()
-        yrs,traces = self.fitTrace(cwidth=3.,porder=3,pad=False)
+        yrs,traces = self.fitTrace(cwidth=30.,porder=2,pad=False,doTracePlot=self.doTracePlot)
+        # Traces is the polynomial fit to the order
         self.image_rect,self.uimage_rect = self.yRectify(self.image,self.uimage,yrs,traces)
                 
         self.sky_rect,self.usky_rect = self.yRectify(self.sky,self.usky,yrs,traces)
-  
+        # Now rectangularly rectified images of each order  
+
         if write_path:
             self.file = self.writeImage(path=write_path)
 
@@ -57,27 +61,26 @@ class Order():
         self.sky_rect[:,:(fullw-orderw)/2] = 0.
         self.sky_rect[:,-(fullw-orderw)/2:] = 0.        
             
-    def fitTrace(self,kwidth=10,porder=3,cwidth=30,pad=False):
-        sh = self.sh
-        yr1 = (0,sh[0])
+    def fitTrace(self,kwidth=10,porder=3,cwidth=30,pad=False,doTracePlot=False):
+        sh = self.sh     # Dimensions of image (ny,nx)
+        yr1 = (0,sh[0])  # (0, ny)
         yrs = [yr1]
 
         polys = []
         for yr in yrs:
-            yindex = np.arange(yr[0],yr[1])
-            kernel = np.median(self.image[yindex,int(sh[0]/2-kwidth):int(sh[0]/2+kwidth)],1)
+            yindex = np.arange(yr[0],yr[1])      # Array from 0 to ny-1
+            kernel = np.median(self.image[yindex,int(sh[1]/2-kwidth):int(sh[1]/2+kwidth)],1)
             centroids = []
-            totals = []
+
             for i in np.arange(sh[1]):
-                col = self.image[yindex,i]
+                col = self.image[yindex,i]   # Extract a single column
                 col_med = np.median(col)
                     
-                total = np.abs((col-col_med).sum())
                 cc = fp.ifft(fp.fft(kernel)*np.conj(fp.fft(col-col_med)))
                 cc_sh = fp.fftshift(cc)
                 centroid = helpers.calc_centroid(cc_sh,cwidth=cwidth).real - yindex.shape[0]/2.
+
                 centroids.append(centroid)
-                totals.append(total)
 
             centroids = np.array(centroids)
         
@@ -85,11 +88,21 @@ class Order():
             gsubs = np.where((np.isnan(centroids)==False) & (xindex>50) & (xindex<sh[1]-50) &
                              (centroids<15) & (centroids>-15))
             
-            centroids[gsubs] = median_filter(centroids[gsubs],size=25)
+            centroids[gsubs] = median_filter(centroids[gsubs],size=5)
             coeffs = np.polyfit(xindex[gsubs],centroids[gsubs],porder)
 
             poly = np.poly1d(coeffs)
             polys.append(poly)
+            
+            if(doTracePlot):
+                trace_y=poly(xindex)+np.argmax(kernel)
+                fig=plt.figure()
+                ax1=fig.add_subplot(111)
+                ax1.imshow(self.image)
+                ax1.plot(xindex, trace_y, linestyle='--')
+                ax1.set_xlim(0,np.shape(self.image)[1]) 
+                ax1.set_ylim(np.shape(self.image)[0],0) 
+                plt.show()
 
         return yrs,polys
 
@@ -130,18 +143,19 @@ class Order():
         self.image = self.image-np.median(self.image,axis=0)
             
     def writeImage(self,filename=None,path='.'):
-        filename = path+'/'+self.target+'_'+str(self.obsid)+'_order'+str(self.onum)+'.fits'
-              
+        date   = self.date.replace('-','')
+        filename = path+'/'+self.target+'_'+str(self.obsid)+'_'+str(date)+'_order'+str(self.onum)+'.fits'
+
         hdu  = pf.PrimaryHDU(self.image_rect)
         uhdu = pf.ImageHDU(self.uimage_rect)
         sky_hdu = pf.ImageHDU(self.sky_rect)
         usky_hdu = pf.ImageHDU(self.usky_rect)
-        
+
         hdu.header['SETNAME'] = (self.setting, 'Setting name')
         hdu.header['ORDER'] = (str(self.onum),'Order number')
 
         hdulist = pf.HDUList([hdu,uhdu,sky_hdu,usky_hdu])
 
-        hdulist.writeto(filename,clobber=True)
+        hdulist.writeto(filename,overwrite=True)
 
         return filename
