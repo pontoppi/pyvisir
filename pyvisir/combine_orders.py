@@ -4,7 +4,7 @@ from scipy import constants,polyfit,poly1d
 from scipy.interpolate import interp1d
 import matplotlib.pylab as plt
 
-import utils.helpers as helpers
+import pyvisir_master.utils.helpers as helpers
 
 class CombSpec():
     def __init__(self, cal_files, write_path=None, micron=False):
@@ -112,6 +112,6 @@ class CombSpec():
             basename = helpers.getBaseName(self.header)
             filename = path+'/'+basename+'_combspec.fits'
 
-        thdulist.writeto(filename,clobber=True)
+        thdulist.writeto(filename,overwrite=True)
 
         return filename  
