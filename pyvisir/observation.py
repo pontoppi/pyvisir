@@ -14,8 +14,11 @@ from scipy.stats import tmean, tvar
 from scipy.ndimage.filters import median_filter
 from scipy import constants
 import matplotlib.pylab as plt
-import pyvisir.inpaint as inpaint
-import utils.helpers as helpers
+import pyvisir_master.pyvisir.inpaint as inpaint
+import pyvisir_master.utils.helpers as helpers
+
+import pdb as pdb
+import pickle as pickle
 
 warnings.filterwarnings('ignore', category=AstropyUserWarning)
 
@@ -38,12 +41,16 @@ class Environment():
     
     '''
     def __init__(self,settings_file='visir.ini',detpars_file='detector.ini'):
+        # Finds files
         sys_dir = self._getSysPath()
-        self.settings = cp.SafeConfigParser()
-        self.settings.read(sys_dir+'/'+settings_file)
-        self.detpars = cp.SafeConfigParser()
-        self.detpars.read(sys_dir+'/'+detpars_file)
-    
+        # ConfigParser is a fancy way to read in config files  
+        self.settings = cp.ConfigParser()    
+        # self.settings.sections() will show info that was read in 
+        self.settings.read(sys_dir+'/'+settings_file)   
+        self.detpars = cp.ConfigParser()
+        # self.detpars.sections() will show info that was read in    
+        self.detpars.read(sys_dir+'/'+detpars_file)     
+
     def _getSysPath(self):
         sys_dir, this_filename = os.path.split(__file__)
         return sys_dir
@@ -72,8 +79,10 @@ class Environment():
         center = self.getSpatialCenter(setting,onum)
         orderw = self.getOrderWidth(setting)
         det = self.getDetPars()
+        # If order width extends below bottom, reset to 0
         down = np.max([center-orderw,0])
-        up = np.min([center+orderw,det['ny']-1])
+        # If order width extends above top, reset to max          
+        up = np.min([center+orderw,det['ny']-1])  
         
         return (down,up)
     
@@ -97,7 +106,7 @@ class Environment():
 
 class Observation():
     '''
-    Private object containing a TEXES observation - that is, all exposures related to a single type of activity.
+    Private object containing a VISIR observation - that is, all exposures related to a single type of activity.
     
     Any specific activity (Darks, Flats, Science, etc.) are modeled as classes derived off the Observation class.
     
@@ -146,9 +155,26 @@ class Observation():
        self.headers = []
         
        for index,row in self.flist.iterrows():
-          cube = {'c11':pf.getdata(row['file'],1),
-                  'c21':pf.getdata(row['file'],2), #currently, we just store the first two half cycles. 
-                  'int':pf.getdata(row['file'],2*row['ncycle']+1)} #the last frame is the chop stack.
+          # each row holds a bunch of info about a given image file
+          # row['file'] is the path to the image file
+
+          hdulist = pf.open(row['file'], memmap=False)
+          data1=hdulist[1].data
+          data2=hdulist[2].data
+          intdata=hdulist[2*row['ncycle']+1].data
+
+          cube = {'c11':data1, #getdata is getting first extension of this image file
+                  'c21':data2, #currently, we just store the first two half cycles.
+                  'int':intdata} #the last frame is the chop stack.
+
+
+#         cube = {'c11':pf.getdata(row['file'],1,memmap=False), #getdata is getting first extension of this image file
+#                  'c21':pf.getdata(row['file'],2,memmap=False), #currently, we just store the first two half cycles.
+#                                                   #getdata is getting the 2nd extension of this image file 
+#                  'int':pf.getdata(row['file'],2*row['ncycle']+1)} #the last frame is the chop stack.
+#                                                   #getdata is getting the last extension
+          hdulist.close()
+
           self.cubes.append(cube)
         
        self.exp_time = self.getExpTime()
@@ -159,9 +185,13 @@ class Observation():
        return exptime
         
     def getSetting(self):
-       waveset   = self.flist['waveset'].iloc[0]        
+       # 12.414, for example
+       waveset   = self.flist['waveset'].iloc[0]
+       # Gets all possible wavelengths from visir.ini file
        wavesets   = self.Envi.getItems('waveset')
+       # Returns index of where waveset=wavesets[i]
        gsub = [i for i,v in enumerate(wavesets) if float(v)==waveset]
+       # Returns name of setting for that index (example, "H2O_2")
        return self.Envi.getSections()[gsub[0]]
        
     def getAirmass(self):
@@ -171,6 +201,10 @@ class Observation():
     def getObsID(self):
        obsid = self.flist['obsid'].iloc[0]
        return obsid
+
+    def getDate(self):
+       date = self.flist['date'].iloc[0]
+       return date
        
     def getNOrders(self):
        setting = self.getSetting()
@@ -180,6 +214,21 @@ class Observation():
        target_name = self.flist['target'].iloc[0]
        return target_name.replace(" ", "")
     
+    def _getSkyStack(self):
+       nexp = len(self.cubes)
+       nx = self.det_pars['nx']
+       ny = self.det_pars['ny']
+        
+       stack = np.zeros((ny,nx,nexp))
+       ustack = np.zeros((ny,nx,nexp))
+       for i,cube in enumerate(self.cubes):
+          # convert everything to e-
+          stack[:,:,i]  = cube['c21']*self.det_pars['gain']
+          # there is currently no error calc
+          ustack[:,:,i] = 1.#self._error(cube[j,:,:])     
+          
+       return stack,ustack
+       
     def _getStack(self):
        nexp = len(self.cubes)
        nx = self.det_pars['nx']
@@ -192,14 +241,15 @@ class Observation():
              sign = -1
           else:
              sign = 1
-             
-          stack[:,:,i]  = cube['int']*self.det_pars['gain']*sign #convert everything to e-
+          # convert everything to e- 
+          stack[:,:,i]  = cube['int']*self.det_pars['gain']*sign
+          # there is currently no error calc
           ustack[:,:,i] = 1.#self._error(cube[j,:,:])
 
        return stack,ustack
     
     def _error(self,data):
-        var_data = np.abs(data*self.exp_pars['itime']*self.exp_pars['nreads']+ #assuming detector units is in e-/s
+        var_data = np.abs(data*self.exp_pars['itime']*self.exp_pars['nreads']+ # assuming detector units is in e-/s
                           self.exp_pars['itime']*self.exp_pars['nreads']*self.det_pars['dc']+
                           self.det_pars['rn']**2/self.exp_pars['nreads'])
         return np.sqrt(var_data)
@@ -236,10 +286,6 @@ class Observation():
         if stack is None:
             stack,ustack = self.stack,self.ustack
         
-        #stack_median = np.median(stack,2)
-        #stack_stddev = np.std(stack,2)
-        #shape = stack.shape
-        #masked_stack = ma.zeros(shape)
         masked_stack = ma.masked_invalid(stack)
         masked_ustack = ma.masked_invalid(ustack)
         image = ma.average(masked_stack,2,weights=1./masked_ustack**2)
@@ -254,8 +300,8 @@ class Observation():
         hdu = pf.PrimaryHDU(self.image.data)
         uhdu = pf.ImageHDU(self.uimage.data)
         hdulist = pf.HDUList([hdu,uhdu])
-        hdulist.writeto(filename,clobber=True)
-    
+        hdulist.writeto(filename,overwrite=True)
+
     def getKeyword(self,keyword):
         try:
             klist = [header[keyword] for header in self.headers]
@@ -281,7 +327,7 @@ class Flat(Observation):
         
         self._normalize(norm_thres)
         
-        #Where the flat field is undefined, it's set to 1 to avoid divide by zeros.
+        # Where the flat field is undefined, it is set to 1 to avoid divide by zeros.
         self.image[np.where(self.image<0.1)] = 1
         
         if save:
@@ -318,50 +364,65 @@ class Dark(Observation):
             self.badpix.dump(filename)
 
 class Nod(Observation):
-    def __init__(self,filelist,dark=None,flat=None,badpix=None):
+    def __init__(self,filelist,dark=None,flat=None,badpix=None,doOffsets=True):
         self.type = 'nod'
-        self.Envi = Environment()
-        self.flist = filelist
+        self.Envi = Environment()  # Reads in visir.ini and detector.ini
+        self.flist = filelist      # Sets flist to self.tdict[key], where key is "standard" or "science"
+        self._openList()   # Gets image data, exposure times, detector params
+      
+        self.doOffsets=doOffsets  
+      
+        self.target = self.getTargetName()   # Returns name of target
+        self.setting = self.getSetting()     # Returns setting name (e.g., H2O_2)
+        self.airmasses = self.getAirmass()   # Airmasses for all images in the cube
+        self.obsid = self.getObsID()         # Returns observation ID        
+        self.date = self.getDate()         # Returns observation ID        
         
-        self._openList()
+
+        self.airmass = np.mean(self.airmasses)   # Take mean of airmasses for cube
         
-        self.target = self.getTargetName()
-        self.setting = self.getSetting()
-        self.airmasses = self.getAirmass()
-        self.obsid = self.getObsID()
-        
-        self.airmass = np.mean(self.airmasses)
-        
-        self.stack,self.ustack = self._getStack()
-        self.height = self.stack[:,:,0].shape[0]
+        self.stack,self.ustack = self._getStack()  # Returns stack (cube) of dimensions ny,nx,nexp
+                                                   # B positions have been reversed in sign
+                                                   # All values multiplied by gain, so they are in electrons
+                                                   # ustack is an error stack (currenty just 1's)
+        self.height = self.stack[:,:,0].shape[0]   # ny (number of rows)
         if flat:
-            self.divideInStack(flat)
+            self.divideInStack(flat)               # Divide each image in stack by flat.  Also, make new error stack.
         if badpix:
             badmask = np.load(badpix)
-            self._correctBadPix(badmask)
-        offsets = self._findYOffsets()
+            self._correctBadPix(badmask)           # Correct for bad pixels
+
+
+        offsets = self._findYOffsets()  # gets Y offset for each image in cube (typically ~few pixels)
+
+        if(self.doOffsets == False):
+            offsets=offsets-offsets  # set offsets to 0
+
+        self.stack   = self._yShift(offsets,self.stack)   # Perform shifts on image stack
+        self.ustack  = self._yShift(offsets,self.ustack)  # Perform shifts on error stack
         
-        self.stack   = self._yShift(offsets,self.stack)
-        self.ustack  = self._yShift(offsets,self.ustack)
-        
-        self.image,self.uimage = self._collapseStack()
-        self.writeImage()
-        #An averaged sky frame is constructed using the straight stack collapse.
-        self.stack,self.ustack = self._getStack()
+        self.image,self.uimage = self._collapseStack()    # Returns error-weighted, mask-corrected, average image
+        self.writeImage()    # Writes nod.fits, but in local directory!
+
+        # An averaged sky frame is constructed 
+        self.stack,self.ustack = self._getSkyStack()   # Returns stack of dimenions ny, nx, nexp, as above 
         if flat:
-            self.divideInStack(flat)
+            self.divideInStack(flat)                 # Divide each image in stack by flat.  Also, make new error stack.
         if badpix:
             badmask = np.load(badpix)
-            self._correctBadPix(badmask)
+            self._correctBadPix(badmask)             # Correct for bad pixels
         
-        offsets = [offset for offset in offsets for i in range(2)]
-        self.stack   = self._yShift(offsets,self.stack)
+#        offsets = [offset for offset in offsets for i in range(2)]   #(offset1,offset1,offset2,offset2, etc.)
+
+        self.stack   = self._yShift(offsets,self.stack)   #
         self.ustack  = self._yShift(offsets,self.ustack)
         
-        self.sky,self.usky = self._collapseStack()
-        self.sky -= np.absolute(self.image)/2.
-        self.usky = np.sqrt(self.uimage**2/2.+self.usky**2)
-    
+        self.sky,self.usky = self._collapseStack()        #Returns error-weighted, mask-corrected, average
+ 
+#        self.sky -= np.absolute(self.image)/2.            #Subtracting aligned image - get back nod pair spectra
+#        self.usky = np.sqrt(self.uimage**2/2.+self.usky**2)
+        
+
     def _correctBadPix(self,badmask):
         for i in np.arange(self.stack.shape[2]):
             plane = self.stack[:,:,i]
@@ -375,16 +436,18 @@ class Nod(Observation):
             self.ustack[:,:,i] = inpaint.replace_nans(NANMask, 5, 0.5, 1, 'idw')
     
     def _findYOffsets(self):
-        
-        kernel = np.median(self.stack[:,:,1],1)
-        offsets = np.empty(0)
-        nplanes = self.stack.shape[2]
+        kernel = np.median(self.stack[:,:,1],1)    # median for each y position - shows approximate pos of spectra
+                                                   # ny in length
+        offsets = np.empty(0)                      # size zero array, with no initialization
+        nplanes = self.stack.shape[2]              # number of images in stack
         for i in np.arange(nplanes):
-            profile = np.median(self.stack[:,:,i],1)
-            cc = fp.ifft(fp.fft(kernel)*np.conj(fp.fft(profile)))
-            cc_sh = fp.fftshift(cc)
-            cen = helpers.calc_centroid(cc_sh).real - self.height/2.
+            profile = np.median(self.stack[:,:,i],1)                 # median for each y position
+            cc = fp.ifft(fp.fft(kernel)*np.conj(fp.fft(profile)))    
+            cc_sh = fp.fftshift(cc)   # shifts zero frequency component to center of spectrum
+            cen = helpers.calc_centroid(cc_sh).real - self.height/2.   # Compute offset
             offsets = np.append(offsets,cen)
+ 
+        # Now there's a Y offset computed for each plane in the cube
         return offsets
     
     def _findXOffsets(self):
