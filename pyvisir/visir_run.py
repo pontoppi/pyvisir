@@ -10,13 +10,14 @@ class visir_run():
         
     def read_run(self,path):
         all_files = os.listdir(path)
-        fits_files = [file for file in all_files if file[-5:]=='.fits']
+        fits_files = [file for file in all_files if file[-5:]=='.fits'] #find fits files only
 
+        date_obss = []
+        dates = [] 
         cats = [] 
         targets = []
         airmasses = []
         exptimes = []
-        posangs = []
         nodpositions = []
         xoffs = []
         yoffs = []
@@ -27,13 +28,13 @@ class visir_run():
         fullpaths = []
         ncycles = []
 
+        # Loop through fits files and extract header info
         for fits_file in fits_files:
             fullpath = os.path.join(path,fits_file)
             hdr = fits.getheader(fullpath)
             cat = hdr['HIERARCH ESO DPR CATG']
             target = hdr['HIERARCH ESO OBS TARG NAME']
             exptime = hdr['HIERARCH ESO DET SEQ1 EXPTIME']
-            posang = hdr['HIERARCH ESO ADA POSANG']
     
             if 'HIERARCH ESO SEQ NODPOS' in hdr:
                 nodpos = hdr['HIERARCH ESO SEQ NODPOS']
@@ -47,8 +48,11 @@ class visir_run():
                 xoff = 0
                 yoff = 0
     
+            date_obs = hdr['DATE-OBS']
+            date = date_obs[0:10]
+
             airmass = hdr['HIERARCH ESO TEL AIRM START']
-            pwv = hdr['HIERARCH ESO TEL AIRM START']
+            pwv = hdr['HIERARCH ESO TEL AMBI IWV START']
                         
             obsid = hdr['HIERARCH ESO OBS ID']
             
@@ -59,11 +63,12 @@ class visir_run():
                
             ncycle =  hdr['HIERARCH ESO DET CHOP NCYCLES']
 
+            date_obss.append(date_obs)
+            dates.append(date)
             cats.append(cat)
             targets.append(target)
             nodpositions.append(nodpos)
             exptimes.append(exptime)
-            posangs.append(posang)
             xoffs.append(xoff)
             yoffs.append(yoff)
             airmasses.append(airmass)
@@ -78,32 +83,37 @@ class visir_run():
                                   'target':pd.Series(targets),
                                   'nodpos':pd.Series(nodpositions),
                                   'exptime':pd.Series(exptimes),
-                                  'posang':pd.Series(posangs),
                                   'xoff':pd.Series(xoffs),
                                   'yoff':pd.Series(yoffs),
                                   'airmass':pd.Series(airmasses),
                                   'pwv':pd.Series(pwvs),
                                   'waveset':pd.Series(wavesets),
                                   'file':pd.Series(fullpaths),
+                                  'date_obs':pd.Series(date_obss),
+                                  'date':pd.Series(dates),
                                   'ncycle':pd.Series(ncycles)})
 
         return table
     
+    # Convenience function to get obsids from data frame, no duplicates
     def get_obsids(self):
         obsids = self.df['obsid']
         return obsids.unique()
     
-    def get_sciencelist(self,obsid,skip_first=True):
+    # Convenience function to extract parts of data frame where category is "science" and
+    # target is that specified by user
+    def get_sciencelist(self,obsid, skip_first=True):
         scilist = self.df.loc[(self.df['obsid'] == obsid) & (self.df['category'] == 'SCIENCE')]
         if skip_first:
             return scilist[1:] #skip the first frame since these seem to have an electronic problem
         else:
-            return scilist   
-    
+            return scilist  
+
+    # Convenience function to extract parts of data frame where category is "calib" and
+    # target is that specified by user
     def get_caliblist(self,obsid,skip_first=True):
         scilist = self.df.loc[(self.df['obsid'] == obsid) & (self.df['category'] == 'CALIB')]
         if skip_first:
             return scilist[1:] #skip the first frame since these seem to have an electronic problem
         else:
-            return scilist   
-            
+            return scilist  
