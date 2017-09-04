@@ -94,10 +94,10 @@ class Order():
             poly = np.poly1d(coeffs)
             polys.append(poly)
             
-            if(doTracePlot):
-                trace_y=poly(xindex)+np.argmax(kernel)
-                fig=plt.figure()
-                ax1=fig.add_subplot(111)
+            if doTracePlot:
+                trace_y = poly(xindex)+np.argmax(kernel)
+                fig = plt.figure()
+                ax1 = fig.add_subplot(111)
                 ax1.imshow(self.image)
                 ax1.plot(xindex, trace_y, linestyle='--')
                 ax1.set_xlim(0,np.shape(self.image)[1]) 

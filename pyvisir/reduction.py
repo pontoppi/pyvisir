@@ -14,7 +14,9 @@ class Reduction():
     as associated calibration files. 
     '''
     def __init__(self, scilist, stdlist, level1=True,level2=True,level3=True,
-                 level1_path='L1FILES',shift=0.0, dtau=0.0, save_dark=False, save_flat=False, **kwargs):
+                 level1_path='L1FILES',shift=0.0, dtau=0.0, save_dark=False, 
+                 save_flat=False, doWaveFitPlot=False, doWaveFit=True, doTracePlot=False, 
+                 doOffsets=True, **kwargs):
 
         self.scilist = scilist
         self.stdlist = stdlist
@@ -22,12 +24,18 @@ class Reduction():
         self.save_dark = save_dark
         self.save_flat = save_flat
 
+        self.doWaveFit     = doWaveFit
+        self.doWaveFitPlot = doWaveFitPlot
+        self.doTracePlot    = doTracePlot
+        self.doOffsets      = doOffsets
+
         self.shift       = shift
         self.dtau        = dtau
         self.level1_path = level1_path
 
         self.mode  = 'SciStd'
         self.tdict = {'science':self.scilist,'standard':self.stdlist}
+
         if level1:
             self._level1()
 
@@ -38,17 +46,28 @@ class Reduction():
             self._level3()
         
     def _level1(self):
-        #OFlat = Flat(self.flat_names, save=self.save_flat)
         OFlat = None
         level1_files = {}
-        for key in self.tdict.keys():
-            ONod    = Nod(self.tdict[key],flat=OFlat)
-            norders = ONod.getNOrders()
+
+        # keys are: standard, science
+        for key in sorted(self.tdict.keys()):
+            '''
+            Nod is in observation.py. ONod is a complex object, including ONod.image, ONod.sky, ONOd.target, ONod.flist
+            ONod.image is main data product - summed A-B stack
+            '''            
+            ONod    = Nod(self.tdict[key],flat=OFlat,doOffsets=self.doOffsets)        
+            # Returns number of orders (read from setting file)                                
+            norders = ONod.getNOrders()   
 
             target_files = []
             for i in np.arange(norders):
-                OOrder   = Order(ONod,onum=i,write_path='SPEC2D')
-                OSpec1D  = Spec1D(OOrder,sa=False,write_path='SPEC1D')
+                OOrder   = Order(ONod,onum=i,write_path=self.level1_path+'/SPEC2D',doTracePlot=self.doTracePlot)   #in order.py
+                #Fits trace to each order; makes rectified image for each order; outputs to SPEC2D
+                OSpec1D  = Spec1D(OOrder,sa=False,write_path=self.level1_path+'/SPEC1D',doWaveFitPlot=self.doWaveFitPlot,
+                                  doFit=self.doWaveFit)  #in spec1d.py
+                                  
+                # Now we have: OSpec1D.flux, .wave, .sky, .uflux, .usky (and others)
+                # Filenames look like: SPEC2D/object_ID_order0.fits, SPEC1D/object_ID_spec1d0.fits
                 OOrder_files = {'2d':OOrder.file, '1d':OSpec1D.file}
                 target_files.append(OOrder_files)
 
@@ -81,11 +100,14 @@ class Reduction():
 
         OCombSpec = CombSpec(level2_files,write_path='COMBSPEC',micron=True)
         
-
     def _getLevel1File(self):
         warnings.resetwarnings()
         warnings.filterwarnings('ignore', category=UserWarning, append=True)
-        header = pf.open(self.sci_file[0],ignore_missing_end=True)[0].header
+        hdulist=pf.open(self.tdict['science'].file.iloc[0],ignore_missing_end=True)
+        header = hdulist[0].header
+        hdulist.close()
+        # Don't see sci_file attribute defined, so replaced line below with lines above
+        # header = pf.open(self.sci_file[0],ignore_missing_end=True)[0].header
         basename = helpers.getBaseName(header)
         filename = basename+'_files.json'
         return filename
