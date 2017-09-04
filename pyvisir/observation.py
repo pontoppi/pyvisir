@@ -14,8 +14,8 @@ from scipy.stats import tmean, tvar
 from scipy.ndimage.filters import median_filter
 from scipy import constants
 import matplotlib.pylab as plt
-import pyvisir_master.pyvisir.inpaint as inpaint
-import pyvisir_master.utils.helpers as helpers
+import pyvisir.inpaint as inpaint
+import utils.helpers as helpers
 
 import pdb as pdb
 import pickle as pickle
