@@ -6,7 +6,7 @@ import pdb as pdb
 import pickle as pickle
 import matplotlib as matplotlib
 import matplotlib.pylab as plt
-from cvs.cvsstats import lm
+#from cvs.cvsstats import lm  # not sure what this dependency is
 
 
 class Spec1D():
@@ -234,7 +234,7 @@ class Spec1D():
                 plt.show()
         wmax_list = np.array(wmax_list)    
 
-        out = lm(wmax_list,w0,doprint=False,doplot=False)
+        # out = lm(wmax_list,w0,doprint=False,doplot=False) 
         wstart = out['ahat']
         dwave = out['bhat']
         data_wave = wstart+np.arange(1024)*dwave

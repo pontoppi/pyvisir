@@ -157,7 +157,6 @@ class Observation():
        for index,row in self.flist.iterrows():
           # each row holds a bunch of info about a given image file
           # row['file'] is the path to the image file
-
           hdulist = pf.open(row['file'], memmap=False)
           data1=hdulist[1].data
           data2=hdulist[2].data
