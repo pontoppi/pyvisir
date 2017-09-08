@@ -73,7 +73,7 @@ class Reduction():
 
             level1_files[key] = target_files
 
-        filename = self._getLevel1File()            
+        filename = self._getLevel1File() 
         f = open(self.level1_path+'/'+filename, 'w')
         json.dump(level1_files,f)
         f.close()

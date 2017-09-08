@@ -33,7 +33,11 @@ class visir_run():
             fullpath = os.path.join(path,fits_file)
             hdr = fits.getheader(fullpath)
             cat = hdr['HIERARCH ESO DPR CATG']
-            target = hdr['HIERARCH ESO OBS TARG NAME']
+            try:
+                target = hdr['HIERARCH ESO OBS TARG NAME']
+            except:
+                target = ''
+                
             exptime = hdr['HIERARCH ESO DET SEQ1 EXPTIME']
     
             if 'HIERARCH ESO SEQ NODPOS' in hdr:
@@ -51,9 +55,16 @@ class visir_run():
             date_obs = hdr['DATE-OBS']
             date = date_obs[0:10]
 
-            airmass = hdr['HIERARCH ESO TEL AIRM START']
-            pwv = hdr['HIERARCH ESO TEL AMBI IWV START']
-                        
+            try:
+                airmass = hdr['HIERARCH ESO TEL AIRM START']
+            except:
+                airmass = ''
+                
+            try:
+                pwv = hdr['HIERARCH ESO TEL AMBI IWV START']
+            except:
+                pwv = ''
+                    
             obsid = hdr['HIERARCH ESO OBS ID']
             
             if 'HIERARCH ESO INS GRAT1 WLEN' in hdr:

@@ -17,9 +17,13 @@ def write_fits(array,filename='test.fits'):
     hdu.writeto(filename,clobber=True)
 
 def getBaseName(header):
-    time   = header['TIME']
-    time   = time.replace(':','')
-    time   = time[0:4]
+    # Newer headers seem to have dropped the time
+    try:
+        time   = header['TIME']
+        time   = time.replace(':','')
+        time   = time[0:4]
+    except:
+        time = ''
     date   = header['DATE-OBS']
     date   = date.replace('-','')
     object = header['OBJECT']
