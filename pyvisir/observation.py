@@ -17,7 +17,6 @@ import matplotlib.pylab as plt
 import pyvisir.inpaint as inpaint
 import utils.helpers as helpers
 
-import pdb as pdb
 import pickle as pickle
 
 warnings.filterwarnings('ignore', category=AstropyUserWarning)
@@ -262,16 +261,14 @@ class Observation():
         except:
             print('Subtraction failed - no image calculated')
     
-    def divideInStack(self,Obs):
+    def divideInStack(self,denominator):
         warnings.resetwarnings()
         warnings.filterwarnings('ignore', category=RuntimeWarning, append=True)
-        
         for i in np.arange(self.stack.shape[2]):
             plane = self.stack[:,:,i]
             uplane = self.ustack[:,:,i]
-            uplane = np.sqrt((uplane/plane)**2+(Obs.uimage/Obs.image)**2)
-            plane /= Obs.image
-            uplane *= np.abs(plane)
+            plane = plane/denominator
+            uplane = uplane/denominator #we currently assume the denominator is noiseless
             
             self.stack[:,:,i]  = plane
             self.ustack[:,:,i] = uplane
@@ -308,60 +305,6 @@ class Observation():
         except ValueError:
             print("Invalid header keyword")
 
-class Flat(Observation):
-    def __init__(self,filelist,dark=None,norm_thres=5000.,save=False):
-        self.type = 'flat'
-        self.Envi = Environment()
-        self.flist = filelist
-        self._openList()
-        self.stack,self.ustack = self._getStack()
-        self.nplanes = self.stack.shape[2]
-        self.height = self.stack[:,:,0].shape[0]
-        self.setting,self.echelle,self.crossdisp = self.getSetting()
-        
-        self.image,self.uimage = self._collapseStack()
-        
-        if dark:
-            self.subtractFromStack(dark)
-        
-        self._normalize(norm_thres)
-        
-        # Where the flat field is undefined, it is set to 1 to avoid divide by zeros.
-        self.image[np.where(self.image<0.1)] = 1
-        
-        if save:
-            self.writeImage()
-        
-    def _normalize(self,norm_thres):
-        flux = np.median(self.image[np.where(self.image>norm_thres)])
-        self.image = self.image/flux
-        self.uimage = self.uimage/flux
-    
-    def makeMask(self):
-        return np.where(self.image<0.1,0,1)
-
-class Dark(Observation):
-    def __init__(self,filelist,save=False):
-        self.type = 'dark'
-        self.Envi = Environment()
-        self.flist = filelist
-        self._openList()
-        self.stack,self.ustack = self._getStack()
-        self.nplanes = self.stack.shape[2]
-        self.height = self.stack[:,:,0].shape[0]
-        
-        self.image,self.uimage = self._collapseStack()
-        self._badPixMap()
-        if save:
-            self.writeImage()
-    
-    def _badPixMap(self,clip=30,filename='badpix.dmp'):
-        median = np.median(self.image)
-        var  = tvar(self.image,(-100,100))
-        self.badpix = ma.masked_greater(self.image-median,clip*np.sqrt(var))
-        if filename is not None:
-            self.badpix.dump(filename)
-
 class Nod(Observation):
     def __init__(self,filelist,dark=None,flat=None,badpix=None,doOffsets=True):
         self.type = 'nod'
@@ -386,7 +329,8 @@ class Nod(Observation):
                                                    # ustack is an error stack (currenty just 1's)
         self.height = self.stack[:,:,0].shape[0]   # ny (number of rows)
         if flat:
-            self.divideInStack(flat)               # Divide each image in stack by flat.  Also, make new error stack.
+            flatdata = pf.getdata(flat)
+            self.divideInStack(flatdata)               # Divide each image in stack by flat.  Also, make new error stack.
         if badpix:
             badmask = np.load(badpix)
             self._correctBadPix(badmask)           # Correct for bad pixels
@@ -395,7 +339,7 @@ class Nod(Observation):
         offsets = self._findYOffsets()  # gets Y offset for each image in cube (typically ~few pixels)
 
         if(self.doOffsets == False):
-            offsets=offsets-offsets  # set offsets to 0
+            offsets = offsets*0.  # set offsets to 0
 
         self.stack   = self._yShift(offsets,self.stack)   # Perform shifts on image stack
         self.ustack  = self._yShift(offsets,self.ustack)  # Perform shifts on error stack
@@ -406,7 +350,8 @@ class Nod(Observation):
         # An averaged sky frame is constructed 
         self.stack,self.ustack = self._getSkyStack()   # Returns stack of dimenions ny, nx, nexp, as above 
         if flat:
-            self.divideInStack(flat)                 # Divide each image in stack by flat.  Also, make new error stack.
+            flatdata = pf.getdata(flat)
+            self.divideInStack(flatdata)                 # Divide each image in stack by flat.  Also, make new error stack.
         if badpix:
             badmask = np.load(badpix)
             self._correctBadPix(badmask)             # Correct for bad pixels

@@ -14,16 +14,15 @@ class Reduction():
     as associated calibration files. 
     '''
     def __init__(self, scilist, stdlist, level1=True,level2=True,level3=True,
-                 level1_path='L1FILES',shift=0.0, dtau=0.0, save_dark=False, 
-                 save_flat=False, doWaveFitPlot=False, doWaveFit=True, doTracePlot=False, 
+                 level1_path='L1FILES',shift=0.0, dtau=0.0, flat=None,
+                 doWaveFitPlot=False, doWaveFit=True, doTracePlot=False, 
                  doOffsets=True, **kwargs):
 
         self.scilist = scilist
         self.stdlist = stdlist
 
-        self.save_dark = save_dark
-        self.save_flat = save_flat
-
+        self.flat = flat
+        
         self.doWaveFit     = doWaveFit
         self.doWaveFitPlot = doWaveFitPlot
         self.doTracePlot    = doTracePlot
@@ -46,7 +45,6 @@ class Reduction():
             self._level3()
         
     def _level1(self):
-        OFlat = None
         level1_files = {}
 
         # keys are: standard, science
@@ -54,8 +52,8 @@ class Reduction():
             '''
             Nod is in observation.py. ONod is a complex object, including ONod.image, ONod.sky, ONOd.target, ONod.flist
             ONod.image is main data product - summed A-B stack
-            '''            
-            ONod    = Nod(self.tdict[key],flat=OFlat,doOffsets=self.doOffsets)        
+            '''    
+            ONod    = Nod(self.tdict[key],flat=self.flat,doOffsets=self.doOffsets)        
             # Returns number of orders (read from setting file)                                
             norders = ONod.getNOrders()   
 
